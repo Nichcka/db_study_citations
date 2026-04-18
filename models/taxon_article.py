@@ -1,8 +1,3 @@
-"""
-Model for the Taxon_article junction table.
-All user input is passed via query parameters (?) — never interpolated into SQL strings.
-"""
-
 import sqlite3
 
 
