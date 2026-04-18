@@ -1,12 +1,3 @@
-"""
-Pydantic schemas for the Article table.
-
-Three schemas follow the Create / Update / Read pattern:
-  - ArticleCreate  — payload for POST   /articles
-  - ArticleUpdate  — payload for PUT    /articles/{pmid}
-  - ArticleRead    — response body (includes all DB fields + computed ones)
-"""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
