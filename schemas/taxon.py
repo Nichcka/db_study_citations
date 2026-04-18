@@ -1,11 +1,3 @@
-"""
-Pydantic schemas for the Taxon table.
-
-  - TaxonCreate  — payload for POST   /taxa
-  - TaxonUpdate  — payload for PUT    /taxa/{tax_id}
-  - TaxonRead    — response body
-"""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
