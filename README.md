@@ -55,6 +55,9 @@ uv run uvicorn main:app
 
 ---
 
+<img width="1919" height="866" alt="image" src="https://github.com/user-attachments/assets/7fa99ac8-8c4f-4dc3-a73c-9c8418fd0e91" />
+
+
 ## Возможности интерфейса
 
 ### Таблица
