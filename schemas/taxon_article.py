@@ -1,11 +1,3 @@
-"""
-Pydantic schemas for the Taxon_article junction table.
-
-  - TaxonArticleCreate  — payload for POST   /taxon-articles
-  - TaxonArticleRead    — response body (flat link)
-  - TaxonArticleFull    — enriched response with nested Taxon + Article data
-"""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
