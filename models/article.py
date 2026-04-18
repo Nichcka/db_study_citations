@@ -1,8 +1,3 @@
-"""
-Model for the Article table.
-All user input is passed via query parameters (?) — never interpolated into SQL strings.
-"""
-
 import sqlite3
 from typing import Optional
 
