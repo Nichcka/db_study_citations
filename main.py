@@ -1,8 +1,3 @@
-"""
-main.py — Citations DB.
-Запуск: uvicorn main:app --reload
-"""
-
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
