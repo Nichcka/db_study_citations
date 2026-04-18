@@ -48,6 +48,7 @@ uv sync
 
 ## Запустить сервер
 ```bash
+git clone https://github.com/Nichcka/db_study_citations/
 uv run uvicorn main:app
 ```
 
