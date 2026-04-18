@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% from "macros.html" import pagination %}
+{% block title %}Articles — Citations DB{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-file-earmark-text me-2"></i>Articles</h1>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addModal">
+    <i class="bi bi-plus-lg me-1"></i>Добавить
+  </button>
+</div>
+
+<!-- ── Filter bar ── -->
+<div class="card mb-3 border-0 shadow-sm">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label mb-1 small">Поиск по названию</label>
+        <input type="text" name="q" class="form-control form-control-sm"
+               placeholder="например: Nitrosococcus" value="{{ request.query_params.get('q', '') }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1 small">Год</label>
+        <input type="number" name="year" class="form-control form-control-sm"
+               placeholder="1976" value="{{ request.query_params.get('year', '') }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1 small">Сортировка fetched_at</label>
+        <select name="sort" class="form-select form-select-sm">
+          <option value=""       {% if not request.query_params.get('sort') %}selected{% endif %}>— нет —</option>
+          <option value="desc"   {% if request.query_params.get('sort')=='desc' %}selected{% endif %}>↓ новые сначала</option>
+          <option value="asc"    {% if request.query_params.get('sort')=='asc'  %}selected{% endif %}>↑ старые сначала</option>
+        </select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+          <i class="bi bi-funnel me-1"></i>Фильтровать
+        </button>
+        <a href="{{ url_for('article_list') }}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Table ── -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    {% if articles %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>PMID</th>
+            <th>Title</th>
+            <th>Authors</th>
+            <th>Year</th>
+            <th>DOI</th>
+            <th>Fetched at</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in articles %}
+          <tr>
+            <td><code>{{ a.pmid }}</code></td>
+            <td>
+              {% if a.doi %}
+                <a href="https://doi.org/{{ a.doi }}" target="_blank" class="text-decoration-none">
+                  {{ a.title | truncate(80) }}
+                </a>
+              {% else %}
+                {{ a.title | truncate(80) }}
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ a.authors or '—' }}</td>
+            <td>{{ a.pub_year or '—' }}</td>
+            <td class="small">
+              {% if a.doi %}
+                <a href="https://doi.org/{{ a.doi }}" target="_blank">{{ a.doi | truncate(30) }}</a>
+              {% else %}—{% endif %}
+            </td>
+            <td class="small text-muted">{{ a.fetched_at or '—' }}</td>
+            <td class="text-end">
+              <button class="btn btn-outline-secondary btn-action me-1"
+                      data-bs-toggle="modal" data-bs-target="#editModal"
+                      data-pmid="{{ a.pmid }}"
+                      data-title="{{ a.title }}"
+                      data-pmc_id="{{ a.pmc_id or '' }}"
+                      data-doi="{{ a.doi or '' }}"
+                      data-pub_year="{{ a.pub_year or '' }}"
+                      data-authors="{{ a.authors or '' }}"
+                      data-fetched_at="{{ a.fetched_at or '' }}">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-outline-danger btn-action"
+                      data-delete-url="{{ url_for('article_delete', pmid=a.pmid) }}"
+                      data-delete-label="PMID {{ a.pmid }}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-inbox display-6 d-block mb-2"></i>Записей не найдено
+    </div>
+    {% endif %}
+  </div>
+  {% if articles %}
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <span class="text-muted small">Всего: {{ total }} | Страница {{ page }} из {{ total_pages }}</span>
+    {{ pagination(page, total_pages, pagination_params) }}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Add modal ── -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Новая статья</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{{ url_for('article_create') }}">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">PMID <span class="text-danger">*</span></label>
+              <input type="number" name="pmid" class="form-control" required min="1">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">PMC ID</label>
+              <input type="text" name="pmc_id" class="form-control" placeholder="PMC123456">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">DOI</label>
+              <input type="text" name="doi" class="form-control" placeholder="10.1234/...">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Title <span class="text-danger">*</span></label>
+              <input type="text" name="title" class="form-control" required>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Authors</label>
+              <input type="text" name="authors" class="form-control" placeholder="Doe J, Smith A">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Year</label>
+              <input type="number" name="pub_year" class="form-control" min="1000" max="2100">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Fetched at</label>
+              <input type="date" name="fetched_at" class="form-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit modal ── -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Редактировать статью</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="editForm" action="">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">PMID</label>
+              <input type="text" id="edit_pmid_display" class="form-control" disabled>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">PMC ID</label>
+              <input type="text" name="pmc_id" id="edit_pmc_id" class="form-control">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">DOI</label>
+              <input type="text" name="doi" id="edit_doi" class="form-control">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Title <span class="text-danger">*</span></label>
+              <input type="text" name="title" id="edit_title" class="form-control" required>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Authors</label>
+              <input type="text" name="authors" id="edit_authors" class="form-control">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Year</label>
+              <input type="number" name="pub_year" id="edit_pub_year" class="form-control">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Fetched at</label>
+              <input type="date" name="fetched_at" id="edit_fetched_at" class="form-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Populate edit modal from row data attributes
+  document.getElementById('editModal').addEventListener('show.bs.modal', function(e) {
+    const btn = e.relatedTarget;
+    document.getElementById('edit_pmid_display').value = btn.dataset.pmid;
+    document.getElementById('editForm').action =
+      "{{ url_for('article_update', pmid=0) }}".replace('/0', '/' + btn.dataset.pmid);
+    document.getElementById('edit_title').value      = btn.dataset.title;
+    document.getElementById('edit_pmc_id').value     = btn.dataset.pmc_id;
+    document.getElementById('edit_doi').value        = btn.dataset.doi;
+    document.getElementById('edit_pub_year').value   = btn.dataset.pub_year;
+    document.getElementById('edit_authors').value    = btn.dataset.authors;
+    document.getElementById('edit_fetched_at').value = btn.dataset.fetched_at;
+  });
+</script>
+{% endblock %}

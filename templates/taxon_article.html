@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% from "macros.html" import pagination %}
+{% block title %}Links — Citations DB{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-link-45deg me-2"></i>Taxon ↔ Article Links</h1>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addModal">
+    <i class="bi bi-plus-lg me-1"></i>Добавить связь
+  </button>
+</div>
+
+<!-- ── Filter bar ── -->
+<div class="card mb-3 border-0 shadow-sm">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label mb-1 small">Название таксона</label>
+        <input type="text" name="taxon_q" class="form-control form-control-sm"
+               placeholder="например: Nitroso" value="{{ request.query_params.get('taxon_q', '') }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label mb-1 small">Название статьи</label>
+        <input type="text" name="article_q" class="form-control form-control-sm"
+               placeholder="например: ammonia" value="{{ request.query_params.get('article_q', '') }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1 small">Сортировка fetched_at</label>
+        <select name="sort" class="form-select form-select-sm">
+          <option value=""     {% if not request.query_params.get('sort') %}selected{% endif %}>— нет —</option>
+          <option value="desc" {% if request.query_params.get('sort')=='desc' %}selected{% endif %}>↓ новые</option>
+          <option value="asc"  {% if request.query_params.get('sort')=='asc'  %}selected{% endif %}>↑ старые</option>
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+          <i class="bi bi-funnel me-1"></i>Найти
+        </button>
+        <a href="{{ url_for('taxon_article_list') }}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Table ── -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    {% if links %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Taxon</th>
+            <th>Rank</th>
+            <th>PMID</th>
+            <th>Article title</th>
+            <th>Year</th>
+            <th>Fetched at</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lnk in links %}
+          {% set rank_colors = {
+            'domain':  'text-bg-dark',   'kingdom': 'text-bg-secondary',
+            'phylum':  'text-bg-primary', 'class':   'text-bg-info',
+            'order':   'text-bg-success', 'family':  'text-bg-warning',
+            'genus':   'text-bg-danger',  'species': 'text-bg-light'
+          } %}
+          <tr>
+            <td class="text-muted small">{{ lnk.id }}</td>
+            <td><em>{{ lnk.name }}</em></td>
+            <td>
+              <span class="badge badge-rank {{ rank_colors.get(lnk.rank, 'text-bg-secondary') }}">
+                {{ lnk.rank }}
+              </span>
+            </td>
+            <td><code>{{ lnk.pmid }}</code></td>
+            <td class="small">
+              {% if lnk.doi %}
+                <a href="https://doi.org/{{ lnk.doi }}" target="_blank" class="text-decoration-none">
+                  {{ lnk.title | truncate(70) }}
+                </a>
+              {% else %}
+                {{ lnk.title | truncate(70) }}
+              {% endif %}
+            </td>
+            <td>{{ lnk.pub_year or '—' }}</td>
+            <td class="small text-muted">{{ lnk.fetched_at or '—' }}</td>
+            <td class="text-end">
+              <button class="btn btn-outline-danger btn-action"
+                      data-delete-url="{{ url_for('taxon_article_delete', link_id=lnk.id) }}"
+                      data-delete-label="Link #{{ lnk.id }} ({{ lnk.name }} ↔ PMID {{ lnk.pmid }})">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-inbox display-6 d-block mb-2"></i>Связей не найдено
+    </div>
+    {% endif %}
+  </div>
+  {% if links %}
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <span class="text-muted small">Всего: {{ total }} | Страница {{ page }} из {{ total_pages }}</span>
+    {{ pagination(page, total_pages, pagination_params) }}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Add modal ── -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Новая связь</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{{ url_for('taxon_article_create') }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Tax ID <span class="text-danger">*</span></label>
+            <input type="number" name="tax_id" class="form-control" required min="1"
+                   placeholder="NCBI Taxonomy ID">
+            <div class="form-text">Таксон должен уже существовать в таблице Taxa.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">PMID <span class="text-danger">*</span></label>
+            <input type="number" name="pmid" class="form-control" required min="1"
+                   placeholder="PubMed ID">
+            <div class="form-text">Статья должна уже существовать в таблице Articles.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Создать</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

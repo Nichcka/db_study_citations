@@ -1,0 +1,370 @@
+{% from "macros.html" import pagination %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Citations DB</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .navbar-brand { font-weight: 600; }
+    .table td { vertical-align: middle; font-size: .88rem; }
+    .table td, .table th { border-right: 1px solid #dee2e6; }
+    .table td:last-child, .table th:last-child { border-right: none; }
+    .badge-rank { font-size: .7rem; }
+    .btn-action { padding: .15rem .4rem; font-size: .78rem; }
+
+    th.col-hdr { padding: 0 !important; white-space: nowrap; }
+    .col-hdr-inner { display: flex; flex-direction: column; }
+    .col-hdr-label {
+      font-size: .75rem; text-transform: uppercase; letter-spacing: .05em;
+      color: #6c757d; padding: 6px 8px 2px;
+      display: flex; align-items: center; gap: 4px; cursor: pointer;
+      user-select: none;
+    }
+    .col-hdr-label:hover { color: #343a40; }
+    .col-search { display: none; padding: 0 6px 5px; }
+    .col-search.open { display: block; }
+    .col-search input {
+      font-size: .78rem; padding: 2px 6px; height: 24px;
+      border: 1px solid #ced4da; border-radius: 4px; width: 100%; outline: none;
+    }
+    .col-search input:focus { border-color: #86b7fe; box-shadow: 0 0 0 2px rgba(13,110,253,.15); }
+    .search-active { color: #0d6efd !important; }
+
+    .col-toggle label { font-size: .85rem; cursor: pointer; user-select: none; }
+    .col-toggle .form-check { margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark sticky-top mb-3" style="background-color: #6C0820;">
+  <div class="container-fluid px-3">
+    <span class="navbar-brand"><i class="bi bi-database me-2"></i>Citations DB</span>
+    <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#addLinkModal">
+      <i class="bi bi-plus-lg me-1"></i>Добавить связь
+    </button>
+  </div>
+</nav>
+
+<div class="container-fluid px-3 pb-5">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show">
+        {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="row g-3">
+
+    {# ── LEFT sidebar ── #}
+    <div class="col-lg-1 col-md-2" style="min-width:160px">
+
+      {# Сортировка + фильтр PMC #}
+      <div class="card border-0 shadow-sm mb-2">
+        <div class="card-header bg-white small fw-semibold py-2">
+          <i class="bi bi-sort-down me-1"></i>Сортировка
+        </div>
+        <div class="card-body p-2">
+          <form method="get" id="sortForm">
+            {% for col in ['tax_id','name','rank','parent_tax_id','pmid','pmc_id','doi','title','pub_year','authors','fetched_at'] %}
+              {% if filters[col] %}<input type="hidden" name="f_{{ col }}" value="{{ filters[col] }}">{% endif %}
+            {% endfor %}
+            <select name="f_sort" class="form-select form-select-sm mb-2" onchange="this.form.submit()">
+              <option value=""     {% if not f_sort %}selected{% endif %}>fetched_at: —</option>
+              <option value="desc" {% if f_sort=='desc' %}selected{% endif %}>fetched_at ↓</option>
+              <option value="asc"  {% if f_sort=='asc'  %}selected{% endif %}>fetched_at ↑</option>
+            </select>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="f_has_pmc" id="chkHasPmc"
+                     value="1" {% if f_has_pmc %}checked{% endif %}
+                     onchange="this.form.submit()">
+              <label class="form-check-label small" for="chkHasPmc">Только с PMC ID</label>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {# Выбор колонок #}
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white small fw-semibold py-2">
+          <i class="bi bi-layout-three-columns me-1"></i>Колонки
+        </div>
+        <div class="card-body p-2 col-toggle">
+          {% set all_cols = [
+            ('tax_id',       'Tax ID'),
+            ('name',         'Taxon name'),
+            ('rank',         'Rank'),
+            ('parent_tax_id','Parent tax'),
+            ('pmid',         'PMID'),
+            ('pmc_id',       'PMC ID'),
+            ('doi',          'DOI'),
+            ('title',        'Title'),
+            ('pub_year',     'Year'),
+            ('authors',      'Authors'),
+            ('fetched_at',   'Fetched at'),
+          ] %}
+          {% for col_id, col_label in all_cols %}
+          <div class="form-check">
+            <input class="form-check-input col-check" type="checkbox"
+                   id="chk_{{ col_id }}" data-col="{{ col_id }}"
+                   {% if col_id in visible_cols %}checked{% endif %}>
+            <label class="form-check-label" for="chk_{{ col_id }}">{{ col_label }}</label>
+          </div>
+          {% endfor %}
+          <div class="d-flex gap-1 mt-2">
+            <button class="btn btn-outline-secondary btn-sm w-50" id="btnAll">Все</button>
+            <button class="btn btn-outline-secondary btn-sm w-50" id="btnNone">—</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {# ── RIGHT: таблица ── #}
+    <div class="col">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+          <form method="get" id="filterForm">
+            <input type="hidden" name="f_sort" value="{{ f_sort }}">
+            <div class="table-responsive">
+              <table class="table table-hover table-sm mb-0" id="mainTable">
+                <thead class="table-light">
+                  <tr>
+
+                    {% macro col_header(col_id, label) %}
+                    <th class="col-hdr col-{{ col_id }}"
+                        {% if col_id not in visible_cols %}style="display:none"{% endif %}>
+                      <div class="col-hdr-inner">
+                        <div class="col-hdr-label" onclick="toggleSearch('{{ col_id }}')">
+                          {{ label }}
+                          <i class="bi bi-search {% if filters[col_id] %}search-active{% endif %}"
+                             style="font-size:.65rem"></i>
+                        </div>
+                        <div class="col-search {% if filters[col_id] %}open{% endif %}" id="cs_{{ col_id }}">
+                          <input type="text" name="f_{{ col_id }}"
+                                 value="{{ filters[col_id] }}"
+                                 placeholder="…"
+                                 onchange="document.getElementById('filterForm').submit()">
+                        </div>
+                      </div>
+                    </th>
+                    {% endmacro %}
+
+                    {{ col_header('tax_id',       'Tax ID') }}
+                    {{ col_header('name',          'Taxon name') }}
+                    {{ col_header('rank',          'Rank') }}
+                    {{ col_header('parent_tax_id', 'Parent tax') }}
+                    {{ col_header('pmid',          'PMID') }}
+                    {{ col_header('pmc_id',        'PMC ID') }}
+                    {{ col_header('doi',           'DOI') }}
+                    {{ col_header('title',         'Title') }}
+                    {{ col_header('pub_year',      'Year') }}
+                    {{ col_header('authors',       'Authors') }}
+                    {{ col_header('fetched_at',    'Fetched at') }}
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in rows %}
+                  {% set rc = {
+                    'domain':'text-bg-dark', 'kingdom':'text-bg-secondary', 'phylum':'text-bg-primary',
+                    'class':'text-bg-info',  'order':'text-bg-success',     'family':'text-bg-warning',
+                    'genus':'text-bg-danger','species':'text-bg-light'
+                  } %}
+                  <tr>
+                    <td class="col-tax_id"        {% if 'tax_id'        not in visible_cols %}style="display:none"{% endif %}><code>{{ row.tax_id }}</code></td>
+                    <td class="col-name"           {% if 'name'          not in visible_cols %}style="display:none"{% endif %}><em>{{ row.name }}</em></td>
+                    <td class="col-rank"           {% if 'rank'          not in visible_cols %}style="display:none"{% endif %}>
+                      <span class="badge badge-rank {{ rc.get(row.rank,'text-bg-secondary') }}">{{ row.rank }}</span>
+                    </td>
+                    <td class="col-parent_tax_id"  {% if 'parent_tax_id' not in visible_cols %}style="display:none"{% endif %}>
+                      {% if row.parent_tax_id %}<code>{{ row.parent_tax_id }}</code>{% else %}<span class="text-muted">—</span>{% endif %}
+                    </td>
+                    <td class="col-pmid"           {% if 'pmid'          not in visible_cols %}style="display:none"{% endif %}><code>{{ row.pmid }}</code></td>
+                    <td class="col-pmc_id"         {% if 'pmc_id'        not in visible_cols %}style="display:none"{% endif %}>{{ row.pmc_id or '—' }}</td>
+                    <td class="col-doi"            {% if 'doi'           not in visible_cols %}style="display:none"{% endif %}>
+                      {% if row.doi %}<a href="https://doi.org/{{ row.doi }}" target="_blank" class="small">{{ row.doi | truncate(26) }}</a>{% else %}—{% endif %}
+                    </td>
+                    <td class="col-title"          {% if 'title'         not in visible_cols %}style="display:none"{% endif %} style="max-width:320px{% if 'title' not in visible_cols %};display:none{% endif %}">
+                      {% if row.doi %}<a href="https://doi.org/{{ row.doi }}" target="_blank" class="text-decoration-none">{{ row.title | truncate(88) }}</a>
+                      {% else %}{{ row.title | truncate(88) }}{% endif %}
+                    </td>
+                    <td class="col-pub_year"       {% if 'pub_year'      not in visible_cols %}style="display:none"{% endif %}>{{ row.pub_year or '—' }}</td>
+                    <td class="col-authors"        {% if 'authors'       not in visible_cols %}style="display:none"{% endif %} style="max-width:200px{% if 'authors' not in visible_cols %};display:none{% endif %}">
+                      <span class="small text-muted">{{ row.authors or '—' }}</span>
+                    </td>
+                    <td class="col-fetched_at"     {% if 'fetched_at'    not in visible_cols %}style="display:none"{% endif %}>
+                      <span class="small text-muted">{{ row.fetched_at or '—' }}</span>
+                    </td>
+                    <td class="text-end" style="white-space:nowrap">
+                      <button class="btn btn-outline-danger btn-action"
+                              data-delete-url="/taxon-articles/{{ row.id }}/delete"
+                              data-delete-label="{{ row.name }} ↔ PMID {{ row.pmid }}">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  {% endfor %}
+
+                  {% if not rows %}
+                  <tr>
+                    <td colspan="12" class="text-center text-muted py-5">
+                      <i class="bi bi-inbox display-5 d-block mb-2"></i>Записей не найдено
+                    </td>
+                  </tr>
+                  {% endif %}
+                </tbody>
+              </table>
+            </div>
+          </form>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <span class="text-muted small">
+            Всего: {{ total }} | Страница {{ page }} из {{ total_pages }}
+            {% if active_filters %}&nbsp;·&nbsp;
+              <a href="/" class="small text-danger text-decoration-none">
+                <i class="bi bi-x-circle me-1"></i>Сбросить фильтры
+              </a>
+            {% endif %}
+          </span>
+          {{ pagination(page, total_pages, pagination_params) }}
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ── DELETE MODAL ── #}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Подтверждение</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="deleteModalBody">Вы уверены?</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Нет</button>
+        <form id="deleteForm" method="post">
+          <button type="submit" class="btn btn-danger">Да, удалить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── ADD LINK MODAL ── #}
+<div class="modal fade" id="addLinkModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Добавить таксон и статью</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/add-full">
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-md-3"><label class="form-label small">Tax ID <span class="text-danger">*</span></label>
+              <input type="number" name="tax_id" class="form-control form-control-sm" min="1" required></div>
+            <div class="col-md-3"><label class="form-label small">PMID <span class="text-danger">*</span></label>
+              <input type="number" name="pmid" class="form-control form-control-sm" min="1" required></div>
+            <div class="col-md-3"><label class="form-label small">Ранг <span class="text-danger">*</span></label>
+              <select name="rank" class="form-select form-select-sm" required>
+                <option value="">— выбери —</option>
+                {% for r in ['domain','kingdom','phylum','class','order','family','genus','species','subspecies','strain'] %}
+                <option value="{{ r }}">{{ r }}</option>{% endfor %}
+              </select></div>
+            <div class="col-md-3"><label class="form-label small">Parent Tax ID</label>
+              <input type="number" name="parent_tax_id" class="form-control form-control-sm" min="1"></div>
+            <div class="col-md-6"><label class="form-label small">Название таксона <span class="text-danger">*</span></label>
+              <input type="text" name="name" class="form-control form-control-sm" required placeholder="Nitrosococcus"></div>
+            <div class="col-md-3"><label class="form-label small">DOI</label>
+              <input type="text" name="doi" class="form-control form-control-sm" placeholder="10.1234/…"></div>
+            <div class="col-md-3"><label class="form-label small">PMC ID</label>
+              <input type="text" name="pmc_id" class="form-control form-control-sm"></div>
+            <div class="col-md-3"><label class="form-label small">Год</label>
+              <input type="number" name="pub_year" class="form-control form-control-sm" min="1000" max="2100"></div>
+            <div class="col-md-9"><label class="form-label small">Title <span class="text-danger">*</span></label>
+              <input type="text" name="title" class="form-control form-control-sm" required></div>
+            <div class="col-md-8"><label class="form-label small">Authors</label>
+              <input type="text" name="authors" class="form-control form-control-sm" placeholder="Doe J, Smith A"></div>
+            <div class="col-md-4"><label class="form-label small">Fetched at</label>
+              <input type="date" name="fetched_at" class="form-control form-control-sm"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── Delete modal ──
+document.querySelectorAll('[data-delete-url]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    document.getElementById('deleteModalBody').textContent =
+      'Вы уверены? Удалить: ' + (btn.dataset.deleteLabel || 'эту запись') + '?';
+    document.getElementById('deleteForm').action = btn.dataset.deleteUrl;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal')).show();
+  });
+});
+
+// При сабмите filterForm передаём состояние чекбокса PMC
+document.getElementById('filterForm').addEventListener('submit', function() {
+  const chk = document.getElementById('chkHasPmc');
+  if (chk && chk.checked) {
+    const inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = 'f_has_pmc'; inp.value = '1';
+    this.appendChild(inp);
+  }
+});
+
+// ── Показать/скрыть поиск столбца ──
+function toggleSearch(colId) {
+  const el = document.getElementById('cs_' + colId);
+  el.classList.toggle('open');
+  if (el.classList.contains('open')) el.querySelector('input').focus();
+}
+
+// ── Column visibility ──
+const STORAGE_KEY = 'citations_visible_cols_v2';
+
+function applyColVisibility() {
+  document.querySelectorAll('.col-check').forEach(chk => {
+    document.querySelectorAll(`.col-${chk.dataset.col}`)
+      .forEach(el => el.style.display = chk.checked ? '' : 'none');
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(
+    [...document.querySelectorAll('.col-check')].filter(c => c.checked).map(c => c.dataset.col)
+  ));
+}
+
+const saved = localStorage.getItem(STORAGE_KEY);
+if (saved) {
+  try {
+    const cols = JSON.parse(saved);
+    document.querySelectorAll('.col-check').forEach(chk => {
+      chk.checked = cols.includes(chk.dataset.col);
+    });
+    applyColVisibility();
+  } catch(e) {}
+}
+
+document.querySelectorAll('.col-check').forEach(chk => chk.addEventListener('change', applyColVisibility));
+document.getElementById('btnAll').addEventListener('click',  () => { document.querySelectorAll('.col-check').forEach(c => c.checked = true);  applyColVisibility(); });
+document.getElementById('btnNone').addEventListener('click', () => { document.querySelectorAll('.col-check').forEach(c => c.checked = false); applyColVisibility(); });
+</script>
+</html>
